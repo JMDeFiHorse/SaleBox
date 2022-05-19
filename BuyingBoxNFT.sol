@@ -15,22 +15,24 @@ contract EventBuyBox is Pausable, Ownable, ReentrancyGuard, Withdrawable {
     address public erc20;
     address public erc721;
     uint256 public start;
-    uint256 public maxUserSupply = 10;
-    uint256 public boxPrice = 1000;
+    uint256 public end;
+    uint256 public maxUserSupply = 50;
+    uint256 public boxPrice = 2000;
 
     address private pancakeRouterV2Contract = 0x10ED43C718714eb63d5aA57B78B54704E256024E;
     address private bnbContract = 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c;
     address private busdContract = 0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56;
 
-    event BuyingBox(address indexed user);
+    event BuyingBox(address indexed user,uint256 amount);
     event EditMaxUserSupply(uint256 amount);
 
     uint256 public totalSellBox = 0;
 
-    constructor(address _erc20, address _contractBox, uint256 _start) {
+    constructor(address _erc20, address _contractBox, uint256 _start, uint256 _duration) {
         erc20 = _erc20;
         erc721 = _contractBox;
         start = _start;
+        end = _start + _duration;
     }
 
     function editMaxUserSupply(uint256 _maxUserSupply) public onlyOwner {
@@ -46,11 +48,14 @@ contract EventBuyBox is Pausable, Ownable, ReentrancyGuard, Withdrawable {
         _unpause();
     }
 
-    function BuyBox(uint256 _amountBox) public whenNotPaused nonReentrant {
+    function buyBox(uint256 _amountBox) public whenNotPaused nonReentrant {
         require(start <= block.timestamp,"This Event Not Yet Start Time" );
+        require(block.timestamp <= end,"This Event Is Time Out" );
         require(_amountBox <= maxUserSupply, "Exceeded the limit on the number of boxes");
         require(_amountBox > 0, "Number of box have to be greater than 0");
-        uint256 _amountTokenToBuyBox = _calcCurPriceToken();
+        require(IERC721(erc721).balanceOf(address(this)) >= _amountBox, "Not Enough Boxes");
+
+        uint256 _amountTokenToBuyBox = calcTokenAmount();
 
         _amountTokenToBuyBox = _amountTokenToBuyBox * _amountBox;
         
@@ -61,11 +66,20 @@ contract EventBuyBox is Pausable, Ownable, ReentrancyGuard, Withdrawable {
             IERC721(erc721).safeTransferFrom(address(this), msg.sender, _tokenId);
             totalSellBox++;
         }
-        emit BuyingBox(msg.sender);
+        emit BuyingBox(msg.sender,_amountBox);
     }
 
-    function _calcCurPriceToken()
-        internal
+    function calcTokenAmount()
+        public
+        view
+        returns(uint256)
+    {
+        uint256 _curPriceToken = calcCurPriceToken();
+        return boxPrice * (10**18) * (10**18) / _curPriceToken;
+    }
+
+    function calcCurPriceToken()
+        public
         view 
         returns(uint256)
     {
@@ -74,18 +88,22 @@ contract EventBuyBox is Pausable, Ownable, ReentrancyGuard, Withdrawable {
         path[0] = erc20;
         path[1] = bnbContract;
         uint256[] memory _oneTokenWithBNBArr = IPancakeRouter01(pancakeRouterV2Contract).getAmountsOut(1*(10**18), path);
+
         path  = new address[](2);
         path[0] = bnbContract;
         path[1] = busdContract;
         uint256[] memory _oneBNBWithBusdArr = IPancakeRouter01(pancakeRouterV2Contract).getAmountsOut(1*(10**18), path);
+
         uint256 _oneTokenWithBNB = _oneTokenWithBNBArr[1];
         uint256 _oneBNBWithBusd = _oneBNBWithBusdArr[1];
         uint256 _curPriceToken = (_oneTokenWithBNB * _oneBNBWithBusd) / (10**18);
-        return boxPrice / _curPriceToken;
+
+        return _curPriceToken;
     }
 
     event Received(address, uint);
     receive () external payable {
         emit Received(msg.sender, msg.value);
     }
+
 }

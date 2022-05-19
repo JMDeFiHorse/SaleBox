@@ -84,26 +84,17 @@ contract EventBuyBox is Pausable, Ownable, ReentrancyGuard, Withdrawable {
         returns(uint256)
     {
         address[] memory path;
-        path  = new address[](2);
-        path[0] = erc20;
+        path  = new address[](3);
+        path[0] = busdContract;
         path[1] = bnbContract;
-        uint256[] memory _oneTokenWithBNBArr = IPancakeRouter01(pancakeRouterV2Contract).getAmountsOut(1*(10**18), path);
+        path[2] = erc20;
+        uint256[] memory _priceArray = IPancakeRouter01(pancakeRouterV2Contract).getAmountsOut(boxPrice*(10**18), path);
 
-        path  = new address[](2);
-        path[0] = bnbContract;
-        path[1] = busdContract;
-        uint256[] memory _oneBNBWithBusdArr = IPancakeRouter01(pancakeRouterV2Contract).getAmountsOut(1*(10**18), path);
-
-        uint256 _oneTokenWithBNB = _oneTokenWithBNBArr[1];
-        uint256 _oneBNBWithBusd = _oneBNBWithBusdArr[1];
-        uint256 _curPriceToken = (_oneTokenWithBNB * _oneBNBWithBusd) / (10**18);
-
-        return _curPriceToken;
+        return _priceArray[2];
     }
 
     event Received(address, uint);
     receive () external payable {
         emit Received(msg.sender, msg.value);
     }
-
 }
